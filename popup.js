@@ -20,7 +20,7 @@ document.getElementById('btnExtrair').addEventListener('click', async () => {
             resultado.value = JSON.stringify(candidatos, null, 2);
             status.innerText = `Sucesso! ${candidatos.length} candidato(s) capturado(s).`;
             
-            // URL configurada para o seu servidor no Render
+            // O seu link definitivo do Render
             const API_URL = 'https://catho-extension.onrender.com/api/receber_candidatos_extensao';
 
             try {
