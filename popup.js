@@ -20,18 +20,24 @@ document.getElementById('btnExtrair').addEventListener('click', async () => {
             resultado.value = JSON.stringify(candidatos, null, 2);
             status.innerText = `Sucesso! ${candidatos.length} candidato(s) capturado(s).`;
             
-            // Quando fizer o deploy no Render, substitua a URL local abaixo pela URL pública (ex: https://sua-app.onrender.com/api/receber_candidatos_extensao)
-            const API_URL = 'http://localhost:5000/api/receber_candidatos_extensao';
+            // URL configurada para o seu servidor no Render
+            const API_URL = 'https://catho-extension.onrender.com/api/receber_candidatos_extensao';
 
             try {
-                await fetch(API_URL, {
+                const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ contatos: candidatos })
                 });
-                status.innerText += " (Enviados ao painel!)";
+
+                if (response.ok) {
+                    status.innerText += " (Enviados ao painel!)";
+                } else {
+                    status.innerText += " (Falha ao enviar ao painel - Erro " + response.status + ")";
+                }
             } catch (e) {
-                console.log("Servidor não está ativo ou inacessível.");
+                console.log("Servidor não está ativo ou inacessível.", e);
+                status.innerText += " (Servidor inacessível)";
             }
         } else {
             status.innerText = "Nenhum candidato encontrado nesta página.";
