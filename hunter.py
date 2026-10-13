@@ -1,5 +1,7 @@
 import hmac
 import os
+import csv
+import io
 from flask import Flask, Response, render_template_string, request, jsonify
 from dotenv import load_dotenv
 
@@ -53,9 +55,15 @@ HTML_TEMPLATE = """
                 </h1>
                 <p class="text-sm text-gray-400 mt-1">Sincronização em tempo real de candidatos via Extensão do Navegador.</p>
             </div>
-            <button onclick="carregarCandidatos()" class="bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-4 rounded-lg transition text-xs flex items-center gap-2">
-                <i class="fa-solid fa-rotate"></i> Atualizar Lista
-            </button>
+            
+            <div class="flex gap-3">
+                <button onclick="carregarCandidatos()" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition text-xs flex items-center gap-2 border border-gray-600">
+                    <i class="fa-solid fa-rotate"></i> Atualizar Lista
+                </button>
+                <a href="/api/exportar_csv" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition text-xs flex items-center gap-2 shadow-lg">
+                    <i class="fa-solid fa-file-csv"></i> Exportar CSV
+                </a>
+            </div>
         </div>
 
         <div class="bg-gray-900/60 p-4 rounded-lg border border-gray-700 mb-6 text-xs text-gray-300">
@@ -63,8 +71,9 @@ HTML_TEMPLATE = """
             <ol class="list-decimal list-inside space-y-1">
                 <li>Abra o site da Catho Empresas no seu navegador logado.</li>
                 <li>Faça a pesquisa de currículos que desejar.</li>
-                <li>Clique no ícone da extensão <b>Start RH - Catho Hunter</b> e pressione <b>Capturar Candidatos</b>.</li>
-                <li>Os perfis aparecerão automaticamente na tabela abaixo.</li>
+                <li>Clique no ícone da extensão <b>Start RH - Catho Hunter</b> e marque os perfis que lhe interessam.</li>
+                <li>Clique em "Enviar Selecionados" e eles aparecerão na tabela abaixo.</li>
+                <li>Por fim, clique em "Exportar CSV" para descarregar a lista.</li>
             </ol>
         </div>
 
@@ -73,7 +82,12 @@ HTML_TEMPLATE = """
                 <h2 class="text-lg font-semibold text-gray-200 flex items-center gap-2">
                     <i class="fa-solid fa-users text-pink-500"></i> Candidatos Sincronizados:
                 </h2>
-                <span id="totalBadge" class="bg-pink-500/10 text-pink-400 text-xs px-3 py-1 rounded-full border border-pink-500/20 font-mono">0 Candidato(s)</span>
+                <div class="flex items-center gap-4">
+                    <span id="totalBadge" class="bg-pink-500/10 text-pink-400 text-xs px-3 py-1 rounded-full border border-pink-500/20 font-mono">0 Candidato(s)</span>
+                    <button onclick="limparPainel()" class="text-red-400 hover:text-red-300 text-xs font-semibold flex items-center gap-1 transition">
+                        <i class="fa-solid fa-trash"></i> Limpar Painel
+                    </button>
+                </div>
             </div>
             
             <div id="logList" class="space-y-3 font-sans text-sm">
@@ -115,7 +129,7 @@ HTML_TEMPLATE = """
                                     <td class="p-3 text-gray-300">${c.cargo}</td>
                                     <td class="p-3 text-center">
                                         <a href="${c.link_cv}" target="_blank" class="inline-flex items-center gap-1 bg-pink-600/20 hover:bg-pink-600/40 text-pink-400 border border-pink-500/30 px-3 py-1 rounded-md text-xs transition">
-                                            <i class="fa-solid fa-arrow-up-right-from-square"></i> Ver Perfil na Catho
+                                            <i class="fa-solid fa-arrow-up-right-from-square"></i> Ver Perfil
                                         </a>
                                     </td>
                                 </tr>`;
@@ -127,6 +141,13 @@ HTML_TEMPLATE = """
                 }
             } catch (err) {
                 console.error('Erro ao atualizar lista:', err);
+            }
+        }
+
+        async function limparPainel() {
+            if(confirm("Tem a certeza que deseja limpar todos os candidatos do painel?")) {
+                await fetch('/api/limpar_candidatos', { method: 'POST' });
+                carregarCandidatos();
             }
         }
 
@@ -143,7 +164,6 @@ def index():
 
 @app.route("/api/receber_candidatos_extensao", methods=["POST", "OPTIONS"])
 def api_receber_candidatos_extensao():
-    # Responde à verificação prévia (preflight) do navegador com permissões de CORS
     if request.method == "OPTIONS":
         resp = jsonify({"status": "ok"})
         resp.headers["Access-Control-Allow-Origin"] = "*"
@@ -168,6 +188,33 @@ def api_receber_candidatos_extensao():
 @app.route("/api/listar_candidatos", methods=["GET"])
 def api_listar_candidatos():
     return jsonify({"status": "success", "contatos": candidatos_capturados})
+
+@app.route("/api/limpar_candidatos", methods=["POST"])
+def api_limpar_candidatos():
+    global candidatos_capturados
+    candidatos_capturados = []
+    return jsonify({"status": "success", "message": "Painel limpo."})
+
+@app.route("/api/exportar_csv", methods=["GET"])
+def api_exportar_csv():
+    global candidatos_capturados
+    si = io.StringIO()
+    
+    # Adicionamos o BOM (Byte Order Mark) para que o Excel em Português leia os acentos corretamente
+    si.write('\ufeff')
+    
+    # Usamos o separador de ponto e vírgula, que é o padrão no Excel para regiões de língua portuguesa
+    cw = csv.writer(si, delimiter=';')
+    cw.writerow(["Nome", "Cargo Visivel", "Link do Curriculo"])
+    
+    for c in candidatos_capturados:
+        cw.writerow([c.get("nome", ""), c.get("cargo", ""), c.get("link_cv", "")])
+        
+    return Response(
+        si.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment;filename=candidatos_catho.csv"}
+    )
 
 if __name__ == "__main__":
     porta = int(os.getenv("PORT", "5000"))
