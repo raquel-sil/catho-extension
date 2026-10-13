@@ -10,7 +10,7 @@ APP_PASSWORD = os.getenv("APP_PASSWORD", "admin")
 
 app = Flask(__name__)
 
-# Armazena temporariamente em memória os candidatos recebidos da extensão
+# Armazena temporariamente os candidatos recebidos da extensão
 candidatos_capturados = []
 
 def _pedir_login():
@@ -20,8 +20,8 @@ def _pedir_login():
 
 @app.before_request
 def exigir_login():
-    # Permite que a extensão envie dados via POST sem travar na autenticação
-    if request.endpoint == "api_receber_candidatos_extensao" and request.method == "POST":
+    # Liberta a verificação do navegador (OPTIONS) e o recebimento de dados sem pedir senha
+    if request.method == "OPTIONS" or request.endpoint == "api_receber_candidatos_extensao":
         return
     if not APP_USER or not APP_PASSWORD:
         return Response("Servidor sem APP_USER/APP_PASSWORD configurados.", 503)
@@ -32,7 +32,6 @@ def exigir_login():
     pass_ok = hmac.compare_digest(auth.password or "", APP_PASSWORD)
     if not (user_ok and pass_ok):
         return _pedir_login()
-
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -142,8 +141,16 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-@app.route("/api/receber_candidatos_extensao", methods=["POST"])
+@app.route("/api/receber_candidatos_extensao", methods=["POST", "OPTIONS"])
 def api_receber_candidatos_extensao():
+    # Responde à verificação prévia (preflight) do navegador com permissões de CORS
+    if request.method == "OPTIONS":
+        resp = jsonify({"status": "ok"})
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        return resp
+
     global candidatos_capturados
     data = request.json or {}
     novos = data.get("contatos", [])
@@ -154,7 +161,9 @@ def api_receber_candidatos_extensao():
             candidatos_capturados.append(c)
             links_existentes.add(c.get("link_cv"))
 
-    return jsonify({"status": "success", "total": len(candidatos_capturados)})
+    resp = jsonify({"status": "success", "total": len(candidatos_capturados)})
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
 
 @app.route("/api/listar_candidatos", methods=["GET"])
 def api_listar_candidatos():
@@ -162,6 +171,4 @@ def api_listar_candidatos():
 
 if __name__ == "__main__":
     porta = int(os.getenv("PORT", "5000"))
-    print("\n--- SERVIDOR LOCAL START RH (PAINEL CATHO HUNTER) INICIADO ---")
-    print(f"Acesse no navegador: http://localhost:{porta}\n")
-    app.run(host="127.0.0.1", port=porta, debug=False)
+    app.run(host="0.0.0.0", port=porta, debug=False)
