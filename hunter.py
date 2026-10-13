@@ -205,10 +205,16 @@ def api_exportar_csv():
     
     # Usamos o separador de ponto e vírgula, que é o padrão no Excel para regiões de língua portuguesa
     cw = csv.writer(si, delimiter=';')
-    cw.writerow(["Nome", "Cargo Visivel", "Link do Curriculo"])
+    cw.writerow(["Nome", "Cargo Visivel", "Resumo das Experiencias", "Competencias", "Link do Curriculo"])
     
     for c in candidatos_capturados:
-        cw.writerow([c.get("nome", ""), c.get("cargo", ""), c.get("link_cv", "")])
+        cw.writerow([
+            c.get("nome", ""),
+            c.get("cargo", ""),
+            c.get("resumo", "Não especificado"),
+            c.get("competencias", "Não especificadas"),
+            c.get("link_cv", "")
+        ])
         
     return Response(
         si.getvalue(),
