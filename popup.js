@@ -50,7 +50,6 @@ function renderizarLista(itens) {
     });
 }
 
-// Ações rápidas de marcar/desmarcar
 document.getElementById('btnMarcarTodos').addEventListener('click', () => {
     document.querySelectorAll('#candidatosLista input[type="checkbox"]').forEach(cb => cb.checked = true);
 });
@@ -73,7 +72,6 @@ btnEnviar.addEventListener('click', async () => {
     }
 
     status.innerText = `A enviar ${selecionados.length} selecionado(s)...`;
-
     const API_URL = 'https://catho-extension.onrender.com/api/receber_candidatos_extensao';
 
     try {
@@ -102,11 +100,19 @@ function extrairCandidatosDaPagina() {
         const nomeEl = card.querySelector('h2, h3, [class*="name"], [class*="nome"]');
         const cargoEl = card.querySelector('[class*="cargo"], [class*="title"], [class*="Role"], p');
         const linkEl = card.querySelector('a[href*="curriculo"]') || card.querySelector('a');
+        
+        // NOVO: Captura os textos e resumos da tela
+        const descricaoEl = card.querySelector('[class*="description"], [class*="experiencia"], [class*="summary"], p:not([class*="cargo"])');
+        const tags = Array.from(card.querySelectorAll('[class*="tag"], [class*="skill"], [class*="badge"], li'))
+                          .map(t => t.innerText.trim())
+                          .filter(t => t.length > 0 && t.length < 50);
 
         if (nomeEl && nomeEl.innerText.trim().length > 0) {
             lista.push({
                 nome: nomeEl.innerText.trim(),
                 cargo: cargoEl ? cargoEl.innerText.trim() : 'Não informado',
+                resumo: descricaoEl ? descricaoEl.innerText.replace(/\s+/g, ' ').trim() : 'Não especificado',
+                competencias: tags.length > 0 ? tags.join(', ') : 'Não especificadas',
                 link_cv: linkEl ? linkEl.href : window.location.href
             });
         }
