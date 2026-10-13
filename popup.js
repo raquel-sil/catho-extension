@@ -6,7 +6,7 @@ const candidatosLista = document.getElementById('candidatosLista');
 const btnLerTela = document.getElementById('btnLerTela');
 const btnEnviar = document.getElementById('btnEnviarSelecionados');
 
-// 1. Lê a tela e renderiza os checkboxes
+// 1. Lê os candidatos visíveis na página
 btnLerTela.addEventListener('click', async () => {
     status.innerText = "A ler candidatos da tela...";
     candidatosLista.innerHTML = "";
@@ -25,7 +25,7 @@ btnLerTela.addEventListener('click', async () => {
     }, (results) => {
         if (results && results[0] && results[0].result && results[0].result.length > 0) {
             candidatosDetectados = results[0].result;
-            status.innerText = `${candidatosDetectados.length} candidato(s) encontrados. Selecione os que deseja:`;
+            status.innerText = `${candidatosDetectados.length} candidato(s) encontrados. Selecione os pretendidos:`;
             renderizarLista(candidatosDetectados);
             listaContainer.style.display = "flex";
         } else {
@@ -58,7 +58,7 @@ document.getElementById('btnDesmarcarTodos').addEventListener('click', () => {
     document.querySelectorAll('#candidatosLista input[type="checkbox"]').forEach(cb => cb.checked = false);
 });
 
-// 2. Envia APENAS os candidatos marcados com checkbox
+// 2. Envia os perfis selecionados para o Render
 btnEnviar.addEventListener('click', async () => {
     const checkboxes = document.querySelectorAll('#candidatosLista input[type="checkbox"]:checked');
     const selecionados = Array.from(checkboxes).map(cb => {
@@ -91,31 +91,78 @@ btnEnviar.addEventListener('click', async () => {
     }
 });
 
-// Função injetada na aba da Catho
+// Função injetada na página de pesquisa da Catho
 function extrairCandidatosDaPagina() {
     const lista = [];
     const cards = document.querySelectorAll('article, [class*="ResumeCard"], [class*="curriculo"], [class*="Card"]');
 
     cards.forEach(card => {
+        // Nome
         const nomeEl = card.querySelector('h2, h3, [class*="name"], [class*="nome"]');
-        const cargoEl = card.querySelector('[class*="cargo"], [class*="title"], [class*="Role"], p');
-        const linkEl = card.querySelector('a[href*="curriculo"]') || card.querySelector('a');
-        
-        // NOVO: Captura os textos e resumos da tela
-        const descricaoEl = card.querySelector('[class*="description"], [class*="experiencia"], [class*="summary"], p:not([class*="cargo"])');
-        const tags = Array.from(card.querySelectorAll('[class*="tag"], [class*="skill"], [class*="badge"], li'))
-                          .map(t => t.innerText.trim())
-                          .filter(t => t.length > 0 && t.length < 50);
+        if (!nomeEl || !nomeEl.innerText.trim()) return;
+        const nome = nomeEl.innerText.trim();
 
-        if (nomeEl && nomeEl.innerText.trim().length > 0) {
-            lista.push({
-                nome: nomeEl.innerText.trim(),
-                cargo: cargoEl ? cargoEl.innerText.trim() : 'Não informado',
-                resumo: descricaoEl ? descricaoEl.innerText.replace(/\s+/g, ' ').trim() : 'Não especificado',
-                competencias: tags.length > 0 ? tags.join(', ') : 'Não especificadas',
-                link_cv: linkEl ? linkEl.href : window.location.href
-            });
+        // Link do perfil
+        const linkEl = card.querySelector('a[href*="curriculo"]') || card.querySelector('a');
+        const link_cv = linkEl ? linkEl.href : window.location.href;
+
+        // Recolha de todas as linhas de texto legíveis do cartão
+        const todasLinhas = card.innerText
+            .split('\n')
+            .map(l => l.trim())
+            .filter(l => l.length > 0);
+
+        // Termos da interface que devem ser descartados
+        const termosIgnorar = [
+            'visualizar currículo', 'ver currículo', 'salvar', 'descartar', 
+            'compartilhar', 'adicionar à vaga', 'mensagem', 'whatsapp', 
+            'ver telefone', 'ações', 'imprimir', 'ver mais'
+        ];
+
+        const linhasUteis = todasLinhas.filter(l => {
+            const lMin = l.toLowerCase();
+            if (l === nome) return false;
+            return !termosIgnorar.some(termo => lMin === termo || lMin.startsWith('ver mais'));
+        });
+
+        // Deteção do Cargo (tenta h3/h4 ou a linha mais próxima do topo que não seja localização/idade)
+        let cargo = 'Não informado';
+        const cargoEl = card.querySelector('h3, h4');
+        if (cargoEl && cargoEl !== nomeEl && cargoEl.innerText.trim().length > 0) {
+            cargo = cargoEl.innerText.trim();
+        } else {
+            const possivelCargo = linhasUteis.find(l => 
+                !l.toLowerCase().includes('anos') && 
+                !l.toLowerCase().includes('rio de janeiro') && 
+                !l.toLowerCase().includes('são paulo') &&
+                l.length < 70
+            );
+            if (possivelCargo) {
+                cargo = possivelCargo;
+            }
         }
+
+        // Deteção de tags/chips de competências (se existirem)
+        const tagEls = Array.from(card.querySelectorAll('[class*="tag"], [class*="chip"], [class*="badge"], [data-testid*="skill"]'))
+            .map(t => t.innerText.trim())
+            .filter(t => t.length > 0 && t.length < 40 && !termosIgnorar.includes(t.toLowerCase()));
+
+        const competencias = tagEls.length > 0 
+            ? [...new Set(tagEls)].join(', ') 
+            : 'Incluído no resumo detalhado';
+
+        // Resumo Completo das Experiências: reúne todos os dados informativos do perfil
+        const resumo = linhasUteis.length > 0 
+            ? linhasUteis.join(' | ') 
+            : 'Sem detalhes adicionais no cartão.';
+
+        lista.push({
+            nome: nome,
+            cargo: cargo,
+            resumo: resumo,
+            competencias: competencias,
+            link_cv: link_cv
+        });
     });
 
     return lista;
